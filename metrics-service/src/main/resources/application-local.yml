@@ -1,0 +1,16 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/metrics
+    username: metrics
+    password: metrics
+
+  kafka:
+    bootstrap-servers: localhost:29092
+
+  data:
+    redis:
+      host: localhost
+      port: 16379
+
+  cache:
+    type: redis

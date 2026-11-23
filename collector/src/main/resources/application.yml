@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: collector
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    producer:
+      acks: all
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      properties:
+        enable.idempotence: true
+
+collector:
+  topic: metrics.raw
+  interval-ms: 5000
+  metric-count: 5
+  metrics-service-url: ${METRICS_SERVICE_URL:http://localhost:8080}

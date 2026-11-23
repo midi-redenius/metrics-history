@@ -1,0 +1,8 @@
+**/target
+**/.idea
+**/*.iml
+**/node_modules
+.git
+collector/target
+docker-compose.yml
+README.md
