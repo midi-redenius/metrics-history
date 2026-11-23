@@ -43,7 +43,31 @@ class HistoryControllerTest extends BaseIntegrationTest {
                 .body("metricId", equalTo(metricId))
                 .body("aggregation", equalTo("AVG"))
                 .body("points.size()", equalTo(1))
-                .body("points[0].value", notNullValue());
+                .body("points[0].bucket", equalTo("2024-01-15T10:00:00Z"))
+                .body("points[0].value", equalTo(120.0F));
+    }
+
+    @Test
+    void shouldSplitRangeIntoStepAlignedBucketsExcludingTo() {
+        int metricId = createMetric("bucketed.metric", "bucket-host");
+        ingest(metricId, Instant.parse("2024-01-15T10:00:00Z"), 10);
+        ingest(metricId, Instant.parse("2024-01-15T10:14:59Z"), 30);
+        ingest(metricId, Instant.parse("2024-01-15T10:15:00Z"), 50);
+        ingest(metricId, Instant.parse("2024-01-15T10:59:00Z"), 70);
+        ingest(metricId, Instant.parse("2024-01-15T11:00:00Z"), 1000);
+
+        given()
+                .queryParam("from", "2024-01-15T10:00:00Z")
+                .queryParam("to", "2024-01-15T11:00:00Z")
+                .queryParam("step", "15 minutes")
+                .queryParam("agg", "MAX")
+        .when()
+                .get("/api/v1/metrics/{id}/history", metricId)
+        .then()
+                .statusCode(200)
+                .body("points.bucket", contains(
+                        "2024-01-15T10:00:00Z", "2024-01-15T10:15:00Z", "2024-01-15T10:45:00Z"))
+                .body("points.value", contains(30.0F, 50.0F, 70.0F));
     }
 
     @Test
@@ -115,7 +139,7 @@ class HistoryControllerTest extends BaseIntegrationTest {
                 .statusCode(200)
                 .body("aggregation", equalTo("P95"))
                 .body("points.size()", equalTo(1))
-                .body("points[0].value", greaterThanOrEqualTo(18.0F));
+                .body("points[0].value", equalTo(19.05F));
     }
 
     @Test

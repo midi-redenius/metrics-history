@@ -21,6 +21,26 @@ jobs:
           cache: maven
       - name: Build and test
         run: ./mvnw -B verify
+      - name: Coverage summary
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import csv, glob
+
+          def pct(missed, covered):
+              return f"{100 * covered / (missed + covered):.1f}%" if missed + covered else "n/a"
+
+          print("| Module | Lines | Branches |\n|---|---|---|")
+          for path in sorted(glob.glob("*/target/site/jacoco/jacoco.csv")):
+              rows = list(csv.DictReader(open(path)))
+              total = lambda key: sum(int(r[key]) for r in rows)
+              print(f"| {path.split('/')[0]} | {pct(total('LINE_MISSED'), total('LINE_COVERED'))} "
+                    f"| {pct(total('BRANCH_MISSED'), total('BRANCH_COVERED'))} |")
+          EOF
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: "*/target/site/jacoco/"
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4

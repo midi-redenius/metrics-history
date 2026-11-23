@@ -97,16 +97,7 @@ public class HistoryService {
 
         List<AggregatedPoint> points = new ArrayList<>(rows.size());
         for (Object[] row : rows) {
-            Instant bucket;
-            if (row[0] instanceof Timestamp ts) {
-                bucket = ts.toInstant();
-            } else if (row[0] instanceof java.time.OffsetDateTime odt) {
-                bucket = odt.toInstant();
-            } else {
-                bucket = (Instant) row[0];
-            }
-            double value = ((Number) row[1]).doubleValue();
-            points.add(new AggregatedPoint(bucket, value));
+            points.add(new AggregatedPoint((Instant) row[0], ((Number) row[1]).doubleValue()));
         }
 
         HistoryResponse response = new HistoryResponse(

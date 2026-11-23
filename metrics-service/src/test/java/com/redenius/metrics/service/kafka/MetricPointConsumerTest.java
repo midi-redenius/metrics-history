@@ -156,29 +156,43 @@ class MetricPointConsumerTest extends BaseIntegrationTest {
 
         dltKafkaTemplate.send(new ProducerRecord<>("metrics.raw", key, payload)).get(5, TimeUnit.SECONDS);
 
+        ConsumerRecord<String, byte[]> dlt = pollRawDltRecord(key);
+        assertThat(dlt.value()).isEqualTo(payload);
+        assertThat(dlt.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_TOPIC).value())
+                .asString(StandardCharsets.UTF_8)
+                .isEqualTo("metrics.raw");
+    }
+
+    @Test
+    void shouldRouteTombstoneToDlt() throws Exception {
+        String key = "tombstone-" + UUID.randomUUID();
+
+        dltKafkaTemplate.send(new ProducerRecord<>("metrics.raw", key, null)).get(5, TimeUnit.SECONDS);
+
+        ConsumerRecord<String, byte[]> dlt = pollRawDltRecord(key);
+        assertThat(dlt.value()).isNull();
+        assertThat(dlt.headers().lastHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE).value())
+                .asString(StandardCharsets.UTF_8)
+                .contains("must not be null");
+    }
+
+    private ConsumerRecord<String, byte[]> pollRawDltRecord(String key) {
         Map<String, Object> props = Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
-                ConsumerConfig.GROUP_ID_CONFIG, "poison-probe-" + UUID.randomUUID(),
+                ConsumerConfig.GROUP_ID_CONFIG, "raw-dlt-probe-" + UUID.randomUUID(),
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         try (var consumer = new KafkaConsumer<>(props, new StringDeserializer(), new ByteArrayDeserializer())) {
             consumer.subscribe(List.of("metrics.raw" + KafkaConsumerConfig.DLT_SUFFIX));
-
-            ConsumerRecord<String, byte[]> dlt = null;
             long deadline = System.currentTimeMillis() + 20_000;
-            while (dlt == null && System.currentTimeMillis() < deadline) {
+            while (System.currentTimeMillis() < deadline) {
                 for (ConsumerRecord<String, byte[]> record : consumer.poll(Duration.ofMillis(500))) {
                     if (key.equals(record.key())) {
-                        dlt = record;
+                        return record;
                     }
                 }
             }
-
-            assertThat(dlt).isNotNull();
-            assertThat(dlt.value()).isEqualTo(payload);
-            assertThat(dlt.headers().lastHeader(KafkaHeaders.DLT_ORIGINAL_TOPIC).value())
-                    .asString(StandardCharsets.UTF_8)
-                    .isEqualTo("metrics.raw");
         }
+        throw new AssertionError("No DLT record with key " + key);
     }
 
     @TestConfiguration
@@ -204,8 +218,10 @@ class MetricPointConsumerTest extends BaseIntegrationTest {
         }
 
         @KafkaListener(topics = "metrics.raw.DLT", groupId = "dlt-probe")
-        void onDlt(@Payload MetricPointMessage message) {
-            dltMessages.add(message);
+        void onDlt(@Payload(required = false) MetricPointMessage message) {
+            if (message != null) {
+                dltMessages.add(message);
+            }
         }
     }
 }

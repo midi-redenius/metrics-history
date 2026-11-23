@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,6 +20,9 @@ class MetricRepositoryTest extends BaseIntegrationTest {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    MetricPointBatchWriter batchWriter;
 
     @Test
     @Transactional
@@ -75,6 +79,31 @@ class MetricRepositoryTest extends BaseIntegrationTest {
         List<Double> remaining = jdbcTemplate.queryForList(
                 "SELECT value FROM metric_point WHERE metric_id = ?", Double.class, metric.getId());
         assertThat(remaining).containsExactly(2.0);
+    }
+
+    @Test
+    void shouldUpsertIntoCompressedChunk() {
+        Long metricId = metricRepository.save(new Metric("compressed.test", "ms", "compressed-host")).getId();
+        Instant t0 = Instant.parse("2023-03-10T12:00:00Z");
+        Instant t1 = t0.plusSeconds(60);
+        Instant t2 = t0.plusSeconds(120);
+        batchWriter.batchUpsert(List.of(new PointRow(metricId, t0, 1.0), new PointRow(metricId, t1, 2.0)));
+
+        jdbcTemplate.queryForList("""
+                SELECT compress_chunk(c) FROM show_chunks('metric_point',
+                    newer_than => TIMESTAMPTZ '2023-03-10 00:00+00', older_than => TIMESTAMPTZ '2023-03-11 00:00+00') c
+                """, String.class);
+        Boolean compressed = jdbcTemplate.queryForObject("""
+                SELECT bool_and(is_compressed) FROM timescaledb_information.chunks
+                WHERE hypertable_name = 'metric_point' AND range_start = TIMESTAMPTZ '2023-03-10 00:00+00'
+                """, Boolean.class);
+        assertThat(compressed).isTrue();
+
+        batchWriter.batchUpsert(List.of(new PointRow(metricId, t0, 5.0), new PointRow(metricId, t2, 3.0)));
+
+        List<Double> values = jdbcTemplate.queryForList(
+                "SELECT value FROM metric_point WHERE metric_id = ? ORDER BY ts", Double.class, metricId);
+        assertThat(values).containsExactly(5.0, 2.0, 3.0);
     }
 
     @Test

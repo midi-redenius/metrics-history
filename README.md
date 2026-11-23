@@ -118,4 +118,6 @@ Tests (Docker must be running for Testcontainers):
 ./mvnw verify
 ```
 
+JaCoCo writes a coverage report per module to `*/target/site/jacoco/index.html`; CI shows the summary on the run page.
+
 The UI starts in live mode: the last hour, aligned to the step and refreshed every 10 s while the tab is visible. Dates and the chart axis are in UTC.

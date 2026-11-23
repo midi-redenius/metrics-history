@@ -215,6 +215,30 @@ class MetricControllerTest extends BaseIntegrationTest {
     }
 
     @Test
+    void shouldReturnEmptyPageWhenNothingMatches() {
+        given()
+                .queryParam("host", "no-such-host")
+        .when()
+                .get("/api/v1/metrics")
+        .then()
+                .statusCode(200)
+                .body("content", empty())
+                .body("page.totalElements", equalTo(0));
+    }
+
+    @Test
+    void shouldReturnBadRequest_400_forMalformedJson() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"name\": \"broken\", ")
+        .when()
+                .post("/api/v1/metrics")
+        .then()
+                .statusCode(400)
+                .body("detail", equalTo("Malformed request body"));
+    }
+
+    @Test
     void shouldCapPageSize() {
         given()
                 .queryParam("size", 5000)
